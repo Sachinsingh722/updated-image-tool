@@ -1,106 +1,137 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pro Image Layout Tool</title>
+    <title>Fabric Overlay Tool</title>
     <style>
-        body { text-align:center; font-family: 'Segoe UI', Arial, sans-serif; background: #f4f4f9; padding: 20px; }
-        .container { background: white; padding: 20px; border-radius: 8px; display: inline-block; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        canvas { border: 2px solid #333; margin-top: 20px; background: #eee; border-radius: 4px; }
-        .controls { margin-top: 20px; display: grid; grid-template-columns: 100px 1fr; gap: 10px; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto; }
-        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; margin: 5px; }
-        button:hover { background: #0056b3; }
+        body { text-align:center; font-family: 'Segoe UI', sans-serif; background: #222; color: white; padding: 20px; }
+        .main-container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        canvas { border: 3px solid #444; background: #000; max-width: 100%; height: auto; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .controls { background: #333; padding: 20px; border-radius: 12px; display: grid; grid-template-columns: 120px 250px; gap: 15px; text-align: left; }
+        input[type=file] { margin-bottom: 10px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        .btn-group { margin-top: 10px; }
+        button { padding: 10px 25px; font-weight: bold; cursor: pointer; border-radius: 5px; border: none; background: #2ecc71; color: white; }
+        button:hover { background: #27ae60; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Image Layout Generator</h2>
+    <h2>Fabric Mockup Generator</h2>
 
-    <label>Ref Image: <input type="file" id="ref" accept="image/*"></label><br><br>
-    <label>Product Image: <input type="file" id="prod" accept="image/*"></label><hr>
+    <div class="main-container">
+        <div class="controls">
+            <div>Step 1: Bed Image</div>
+            <input type="file" id="bedInput" accept="image/*">
+            
+            <div>Step 2: Pattern</div>
+            <input type="file" id="patternInput" accept="image/*">
 
-    <div class="controls">
-        <label>X Position:</label> <input type="range" id="posX" min="-250" max="500" value="100">
-        <label>Y Position:</label> <input type="range" id="posY" min="-250" max="500" value="100">
-        <label>Scale:</label> <input type="range" id="size" min="10" max="800" value="300">
-        <label>Radius:</label> <input type="range" id="radius" min="0" max="100" value="20">
+            <label>Scale Pattern:</label>
+            <input type="range" id="scale" min="0.1" max="2" step="0.01" value="0.5">
+
+            <label>Rotation:</label>
+            <input type="range" id="rotation" min="0" max="360" value="0">
+
+            <label>Fade (Opacity):</label>
+            <input type="range" id="opacity" min="0" max="1" step="0.01" value="0.8">
+
+            <div class="btn-group">
+                <button onclick="download()">Download Result</button>
+            </div>
+        </div>
+
+        <canvas id="canvas"></canvas>
     </div>
 
-    <button onclick="downloadImage()">Download Result</button><br>
-    <canvas id="canvas" width="500" height="500"></canvas>
-</div>
-
 <script>
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    let bedImg = new Image();
+    let patternImg = new Image();
+    let bedLoaded = false;
+    let patternLoaded = false;
 
-let refImg = new Image();
-let prodImg = new Image();
-let refLoaded = false;
-let prodLoaded = false;
+    // Load Bed Image (Image 2)
+    document.getElementById('bedInput').onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            bedImg.src = event.target.result;
+            bedImg.onload = () => {
+                canvas.width = bedImg.width;
+                canvas.height = bedImg.height;
+                bedLoaded = true;
+                draw();
+            };
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    };
 
-// Event listeners for real-time updates
-document.querySelectorAll('input[type=range]').forEach(input => {
-    input.addEventListener('input', draw);
-});
+    // Load Pattern Image (Image 1)
+    document.getElementById('patternInput').onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            patternImg.src = event.target.result;
+            patternImg.onload = () => {
+                patternLoaded = true;
+                draw();
+            };
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    };
 
-document.getElementById('ref').onchange = (e) => {
-    refImg.src = URL.createObjectURL(e.target.files[0]);
-    refImg.onload = () => { refLoaded = true; draw(); };
-};
+    // Listen for slider changes
+    document.querySelectorAll('input[type=range]').forEach(input => {
+        input.addEventListener('input', draw);
+    });
 
-document.getElementById('prod').onchange = (e) => {
-    prodImg.src = URL.createObjectURL(e.target.files[0]);
-    prodImg.onload = () => { prodLoaded = true; draw(); };
-};
+    function draw() {
+        if (!bedLoaded) return;
 
-function drawRoundedImage(img, x, y, w, h, r) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(img, x, y, w, h);
-    ctx.restore();
-}
+        // 1. Draw the Bed Base
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bedImg, 0, 0);
 
-function draw() {
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (patternLoaded) {
+            const scale = parseFloat(document.getElementById('scale').value);
+            const rotation = parseInt(document.getElementById('rotation').value) * Math.PI / 180;
+            const opacity = parseFloat(document.getElementById('opacity').value);
 
-    // 1. Draw Reference Background
-    if (refLoaded) {
-        ctx.globalAlpha = 0.4;
-        ctx.drawImage(refImg, 0, 0, canvas.width, canvas.height);
-        ctx.globalAlpha = 1.0;
+            ctx.save();
+            
+            // Set transparency so we can see the bed details underneath
+            ctx.globalAlpha = opacity;
+            
+            // Multiply/Overlay effect (Standard for mockups)
+            ctx.globalCompositeOperation = 'multiply';
+
+            // Create a repeating pattern
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = patternImg.width * scale;
+            tempCanvas.height = patternImg.height * scale;
+            tempCtx.drawImage(patternImg, 0, 0, tempCanvas.width, tempCanvas.height);
+            
+            const pattern = ctx.createPattern(tempCanvas, 'repeat');
+            
+            // Apply transformation
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(rotation);
+            ctx.translate(-canvas.width, -canvas.height); // Offset to cover whole area
+            
+            ctx.fillStyle = pattern;
+            ctx.fillRect(0, 0, canvas.width * 2, canvas.height * 2);
+            
+            ctx.restore();
+        }
     }
 
-    // 2. Draw Product with Sliders
-    if (prodLoaded) {
-        const x = parseInt(document.getElementById("posX").value);
-        const y = parseInt(document.getElementById("posY").value);
-        const size = parseInt(document.getElementById("size").value);
-        const radius = parseInt(document.getElementById("radius").value);
-        
-        // Calculate aspect ratio to prevent stretching
-        const ratio = prodImg.width / prodImg.height;
-        const width = size;
-        const height = size / ratio;
-
-        drawRoundedImage(prodImg, x, y, width, height, radius);
+    function download() {
+        const link = document.createElement('a');
+        link.download = 'bed-mockup.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
     }
-}
-
-function downloadImage() {
-    const link = document.createElement('a');
-    link.download = 'layout-design.png';
-    link.href = canvas.toDataURL();
-    link.click();
-}
 </script>
 
 </body>
