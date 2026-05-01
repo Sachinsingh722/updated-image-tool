@@ -84,27 +84,59 @@ function reset(){
     draw();
 }
 
-function draw(){
+function draw() {
 
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw bed
-    if(bedImg.src){
-        ctx.drawImage(bedImg,0,0);
+    // ✅ Draw bed
+    if (bedImg.complete && bedImg.naturalWidth !== 0) {
+        ctx.drawImage(bedImg, 0, 0);
     }
 
-    // Draw points
-    if(points.length){
+    // Draw polygon
+    if (points.length > 0) {
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
-        for(let i=1;i<points.length;i++){
+        for (let i = 1; i < points.length; i++) {
             ctx.lineTo(points[i].x, points[i].y);
         }
-        ctx.strokeStyle="red";
-        ctx.lineWidth=2;
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
         ctx.stroke();
     }
 
+    // ✅ Simple fitted pattern (NO BLACK ISSUE)
+    if (patternImg.complete && patternImg.naturalWidth !== 0 && points.length === 4) {
+
+        ctx.save();
+
+        // Clip to bed area
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        ctx.lineTo(points[1].x, points[1].y);
+        ctx.lineTo(points[2].x, points[2].y);
+        ctx.lineTo(points[3].x, points[3].y);
+        ctx.closePath();
+        ctx.clip();
+
+        // Bounding box
+        const minX = Math.min(...points.map(p => p.x));
+        const maxX = Math.max(...points.map(p => p.x));
+        const minY = Math.min(...points.map(p => p.y));
+        const maxY = Math.max(...points.map(p => p.y));
+
+        const width = maxX - minX;
+        const height = maxY - minY;
+
+        // Draw stretched image
+        ctx.globalAlpha = 0.85;
+        ctx.globalCompositeOperation = "multiply";
+
+        ctx.drawImage(patternImg, minX, minY, width, height);
+
+        ctx.restore();
+    }
+}
     // ✅ Perspective mapping
     if(patternImg.src && points.length === 4){
 
