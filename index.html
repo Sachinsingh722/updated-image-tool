@@ -1,138 +1,141 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fabric Overlay Tool</title>
+    <title>Precision Fabric Mockup</title>
     <style>
-        body { text-align:center; font-family: 'Segoe UI', sans-serif; background: #222; color: white; padding: 20px; }
-        .main-container { display: flex; flex-direction: column; align-items: center; gap: 20px; }
-        canvas { border: 3px solid #444; background: #000; max-width: 100%; height: auto; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        .controls { background: #333; padding: 20px; border-radius: 12px; display: grid; grid-template-columns: 120px 250px; gap: 15px; text-align: left; }
-        input[type=file] { margin-bottom: 10px; }
-        input[type=range] { width: 100%; cursor: pointer; }
-        .btn-group { margin-top: 10px; }
-        button { padding: 10px 25px; font-weight: bold; cursor: pointer; border-radius: 5px; border: none; background: #2ecc71; color: white; }
-        button:hover { background: #27ae60; }
+        body { text-align:center; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; margin: 0; padding: 20px; }
+        .wrapper { display: flex; flex-direction: column; align-items: center; }
+        canvas { border: 2px solid #555; cursor: crosshair; background-color: #000; max-width: 90vw; }
+        .toolbar { background: #333; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        .control-group { display: flex; flex-direction: column; align-items: flex-start; font-size: 12px; }
+        button { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .btn-clear { background: #e74c3c; color: white; }
+        .btn-download { background: #2ecc71; color: white; }
     </style>
 </head>
 <body>
 
-    <h2>Fabric Mockup Generator</h2>
+    <h2>Step 1: Draw around the bed | Step 2: Adjust Pattern</h2>
 
-    <div class="main-container">
-        <div class="controls">
-            <div>Step 1: Bed Image</div>
-            <input type="file" id="bedInput" accept="image/*">
-            
-            <div>Step 2: Pattern</div>
-            <input type="file" id="patternInput" accept="image/*">
-
-            <label>Scale Pattern:</label>
-            <input type="range" id="scale" min="0.1" max="2" step="0.01" value="0.5">
-
-            <label>Rotation:</label>
-            <input type="range" id="rotation" min="0" max="360" value="0">
-
-            <label>Fade (Opacity):</label>
-            <input type="range" id="opacity" min="0" max="1" step="0.01" value="0.8">
-
+    <div class="wrapper">
+        <div class="toolbar">
+            <div class="control-group">
+                <label>1. Images</label>
+                <input type="file" id="bedInput" accept="image/*">
+                <input type="file" id="patternInput" accept="image/*">
+            </div>
+            <div class="control-group">
+                <label>2. Pattern Scale</label>
+                <input type="range" id="scale" min="0.05" max="1" step="0.01" value="0.2">
+            </div>
+            <div class="control-group">
+                <label>3. Opacity</label>
+                <input type="range" id="opacity" min="0" max="1" step="0.1" value="0.7">
+            </div>
             <div class="btn-group">
-                <button onclick="download()">Download Result</button>
+                <button class="btn-clear" onclick="resetPoints()">Clear Mask</button>
+                <button class="btn-download" onclick="download()">Download</button>
             </div>
         </div>
 
         <canvas id="canvas"></canvas>
+        <p><i>Click on the corners of the bed to create the area where the fabric should go.</i></p>
     </div>
 
 <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
-    
     let bedImg = new Image();
     let patternImg = new Image();
-    let bedLoaded = false;
-    let patternLoaded = false;
-
-    // Load Bed Image (Image 2)
-    document.getElementById('bedInput').onchange = (e) => {
+    let points = []; // Store the mask coordinates
+    
+    // Upload Handlers
+    document.getElementById('bedInput').onchange = (e) => loadImg(e, bedImg, true);
+    document.getElementById('patternInput').onchange = (e) => loadImg(e, patternImg, false);
+    
+    function loadImg(e, imgObj, isBed) {
         const reader = new FileReader();
         reader.onload = (event) => {
-            bedImg.src = event.target.result;
-            bedImg.onload = () => {
-                canvas.width = bedImg.width;
-                canvas.height = bedImg.height;
-                bedLoaded = true;
+            imgObj.src = event.target.result;
+            imgObj.onload = () => {
+                if(isBed) {
+                    canvas.width = imgObj.width;
+                    canvas.height = imgObj.height;
+                }
                 draw();
             };
         };
         reader.readAsDataURL(e.target.files[0]);
-    };
+    }
 
-    // Load Pattern Image (Image 1)
-    document.getElementById('patternInput').onchange = (e) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            patternImg.src = event.target.result;
-            patternImg.onload = () => {
-                patternLoaded = true;
-                draw();
-            };
-        };
-        reader.readAsDataURL(e.target.files[0]);
-    };
-
-    // Listen for slider changes
-    document.querySelectorAll('input[type=range]').forEach(input => {
-        input.addEventListener('input', draw);
+    // Click to draw points
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+        points.push({x, y});
+        draw();
     });
 
+    function resetPoints() { points = []; draw(); }
+
     function draw() {
-        if (!bedLoaded) return;
-
-        // 1. Draw the Bed Base
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(bedImg, 0, 0);
+        
+        // 1. Draw Bed
+        if (bedImg.src) ctx.drawImage(bedImg, 0, 0);
 
-        if (patternLoaded) {
-            const scale = parseFloat(document.getElementById('scale').value);
-            const rotation = parseInt(document.getElementById('rotation').value) * Math.PI / 180;
-            const opacity = parseFloat(document.getElementById('opacity').value);
+        // 2. Draw Mask UI (the red lines while drawing)
+        if (points.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
 
+        // 3. Draw Pattern inside Mask
+        if (patternImg.src && points.length > 2) {
             ctx.save();
             
-            // Set transparency so we can see the bed details underneath
-            ctx.globalAlpha = opacity;
-            
-            // Multiply/Overlay effect (Standard for mockups)
+            // Create the clip area from points
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+            ctx.closePath();
+            ctx.clip();
+
+            // Set blend mode and opacity
+            ctx.globalAlpha = document.getElementById('opacity').value;
             ctx.globalCompositeOperation = 'multiply';
 
-            // Create a repeating pattern
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = patternImg.width * scale;
-            tempCanvas.height = patternImg.height * scale;
-            tempCtx.drawImage(patternImg, 0, 0, tempCanvas.width, tempCanvas.height);
+            // Create and Draw Pattern
+            const scale = document.getElementById('scale').value;
+            const pCanvas = document.createElement('canvas');
+            const pCtx = pCanvas.getContext('2d');
+            pCanvas.width = patternImg.width * scale;
+            pCanvas.height = patternImg.height * scale;
+            pCtx.drawImage(patternImg, 0, 0, pCanvas.width, pCanvas.height);
             
-            const pattern = ctx.createPattern(tempCanvas, 'repeat');
-            
-            // Apply transformation
-            ctx.translate(canvas.width / 2, canvas.height / 2);
-            ctx.rotate(rotation);
-            ctx.translate(-canvas.width, -canvas.height); // Offset to cover whole area
-            
+            const pattern = ctx.createPattern(pCanvas, 'repeat');
             ctx.fillStyle = pattern;
-            ctx.fillRect(0, 0, canvas.width * 2, canvas.height * 2);
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             ctx.restore();
         }
     }
 
+    // Update on slider move
+    document.querySelectorAll('input[type=range]').forEach(i => i.oninput = draw);
+
     function download() {
         const link = document.createElement('a');
-        link.download = 'bed-mockup.png';
-        link.href = canvas.toDataURL('image/png');
+        link.download = 'perfect-mockup.png';
+        link.href = canvas.toDataURL();
         link.click();
     }
 </script>
-
 </body>
+</html>
 </html>
