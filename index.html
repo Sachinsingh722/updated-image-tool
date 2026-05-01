@@ -96,33 +96,25 @@
         }
 
         // 3. Draw Pattern inside Mask
-        if (patternImg.src && points.length > 2) {
-            ctx.save();
-            
-            // Create the clip area from points
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
-            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-            ctx.closePath();
-            ctx.clip();
+// ✅ Perspective fitting (REAL bedsheet effect)
+if (patternImg.src && points.length === 4) {
 
-            // Set blend mode and opacity
-            ctx.globalAlpha = document.getElementById('opacity').value;
-            ctx.globalCompositeOperation = 'multiply';
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = patternImg.width;
+    tempCanvas.height = patternImg.height;
 
-            // Create and Draw Pattern
-            const scale = document.getElementById('scale').value;
-            const pCanvas = document.createElement('canvas');
-            const pCtx = pCanvas.getContext('2d');
-            pCanvas.width = patternImg.width * scale;
-            pCanvas.height = patternImg.height * scale;
-            pCtx.drawImage(patternImg, 0, 0, pCanvas.width, pCanvas.height);
-            
-            const pattern = ctx.createPattern(pCanvas, 'repeat');
-            ctx.fillStyle = pattern;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.restore();
+    const tctx = tempCanvas.getContext("2d");
+    tctx.drawImage(patternImg, 0, 0);
+
+    const p = new Perspective(ctx, tempCanvas);
+
+    p.draw([
+        [points[0].x, points[0].y], // top-left
+        [points[1].x, points[1].y], // top-right
+        [points[2].x, points[2].y], // bottom-right
+        [points[3].x, points[3].y]  // bottom-left
+    ]);
+}
         }
     }
 
@@ -135,7 +127,8 @@
         link.href = canvas.toDataURL();
         link.click();
     }
-</script>
+<script src="https://cdn.jsdelivr.net/gh/wanadev/perspective.js/dist/perspective.min.js"></script>
+    
 </body>
 </html>
 </html>
